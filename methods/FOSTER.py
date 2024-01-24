@@ -6,14 +6,16 @@ from torch import nn
 from torch import optim
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
-from models.base import BaseLearner
+from methods.BaseModel import BaseModel
 from utils.inc_net import FOSTERNet
 from utils.toolkit import count_parameters, target2onehot, tensor2numpy
+
+# Please refer to https://github.com/G-U-N/ECCV22-FOSTER for the full source code to reproduce foster.
 
 EPSILON = 1e-8
 
 
-class CLCR(BaseLearner):
+class FOSTER(BaseModel):
     def __init__(self, args):
         super().__init__(args)
         self.args = args
