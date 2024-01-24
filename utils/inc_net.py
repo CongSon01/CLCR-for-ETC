@@ -1,88 +1,20 @@
 import copy
 import logging
 import torch
-from torch import _nnpack_available
+from torch import nn
+from ETC_classifier.resnet import resnet18, resnet34, resnet50
+from ETC_classifier.CLCR_Classifier import CLCR_Classifier
 
 def get_convnet(convnet_type, pretrained=False):
     name = convnet_type.lower()
-    if name == "resnet32":
-        return resnet32()
+    if name == "CLCR_Classifier":
+        return CLCR_Classifier()
     elif name == "resnet18":
         return resnet18(pretrained=pretrained)
     elif name == "resnet34":
         return resnet34(pretrained=pretrained)
     elif name == "resnet50":
         return resnet50(pretrained=pretrained)
-    elif name == "cosine_resnet18":
-        return cosine_resnet18(pretrained=pretrained)
-    elif name == "cosine_resnet32":
-        return cosine_resnet32()
-    elif name == "cosine_resnet34":
-        return cosine_resnet34(pretrained=pretrained)
-    elif name == "cosine_resnet50":
-        return cosine_resnet50(pretrained=pretrained)
-    
-    # MEMO benchmark backbone
-    elif name == 'memo_resnet18':
-        _basenet, _adaptive_net = get_memo_resnet18()
-        return _basenet, _adaptive_net
-    elif name == 'memo_resnet32':
-        _basenet, _adaptive_net = get_memo_resnet32()
-        return _basenet, _adaptive_net
-    
-    # AUC
-    ## cifar
-    elif name == 'conv2':
-        return conv2_cifar()
-    elif name == 'resnet14_cifar':
-        return resnet14_cifar()
-    elif name == 'resnet20_cifar':
-        return resnet20_cifar()
-    elif name == 'resnet26_cifar':
-        return resnet26_cifar()
-    
-    elif name == 'memo_conv2':
-        g_blocks, s_blocks = memo_conv2_cifar() # generalized/specialized
-        return g_blocks, s_blocks
-    elif name == 'memo_resnet14_cifar':
-        g_blocks, s_blocks = memo_resnet14_cifar() # generalized/specialized
-        return g_blocks, s_blocks
-    elif name == 'memo_resnet20_cifar':
-        g_blocks, s_blocks = memo_resnet20_cifar() # generalized/specialized
-        return g_blocks, s_blocks
-    elif name == 'memo_resnet26_cifar':
-        g_blocks, s_blocks = memo_resnet26_cifar() # generalized/specialized
-        return g_blocks, s_blocks
-    
-    ## imagenet
-    elif name == 'conv4':
-        return conv4_imagenet()
-    elif name == 'resnet10_imagenet':
-        return resnet10_imagenet()
-    elif name == 'resnet26_imagenet':
-        return resnet26_imagenet()
-    elif name == 'resnet34_imagenet':
-        return resnet34_imagenet()
-    elif name == 'resnet50_imagenet':
-        return resnet50_imagenet()
-    
-    elif name == 'memo_conv4':
-        g_blcoks, s_blocks = memo_conv4_imagenet()
-        return g_blcoks, s_blocks
-    elif name == 'memo_resnet10_imagenet':
-        g_blcoks, s_blocks = memo_resnet10_imagenet()
-        return g_blcoks, s_blocks
-    elif name == 'memo_resnet26_imagenet':
-        g_blcoks, s_blocks = memo_resnet26_imagenet()
-        return g_blcoks, s_blocks
-    elif name == 'memo_resnet34_imagenet':
-        g_blocks, s_blocks = memo_resnet34_imagenet()
-        return g_blocks, s_blocks
-    elif name == 'memo_resnet50_imagenet':
-        g_blcoks, s_blocks = memo_resnet50_imagenet()
-        return g_blcoks, s_blocks
-    else:
-        raise NotImplementedError("Unknown type {}".format(convnet_type))
     
 class FOSTERNet(nn.Module):
     def __init__(self, convnet_type, pretrained):
