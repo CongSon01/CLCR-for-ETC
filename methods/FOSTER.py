@@ -294,8 +294,9 @@ class FOSTER(BaseModel):
             logging.info(info)
 
     def _feature_compression(self, train_loader, test_loader):
+        # Khởi tạo Mô hình mới (new model) và Mô hình cũ (old model)
         self._snet = FOSTERNet(self.args["convnet_type"], False)
-        self._snet.update_fc(self._total_classes)
+        self._snet.update_fc(self._total_classes) # Cập nhật lớp fully connected của mô hình mới để có thể chứa số lượng lớp hiện tại 
         if len(self._multiple_gpus) > 1:
             self._snet = nn.DataParallel(self._snet, self._multiple_gpus)
         if hasattr(self._snet, "module"):
@@ -303,9 +304,11 @@ class FOSTER(BaseModel):
         else:
             self._snet_module_ptr = self._snet
         self._snet.to(self._device)
+        # Copy trọng số của lớp convolution từ old model sang new model.
         self._snet_module_ptr.convnets[0].load_state_dict(
             self._network_module_ptr.convnets[0].state_dict()
         )
+        # Copy trọng số của fully connected layer từ old model sang new model.
         self._snet_module_ptr.copy_fc(self._network_module_ptr.oldfc)
         optimizer = optim.SGD(
             filter(lambda p: p.requires_grad, self._snet.parameters()),
@@ -317,22 +320,25 @@ class FOSTER(BaseModel):
         )
         self._network.eval()
         prog_bar = tqdm(range(self.args["compression_epochs"]))
+        # Huấn luyện Mô hình mới với Knowledge Distillation
         for _, epoch in enumerate(prog_bar):
-            self._snet.train()
+            self._snet.train() # Chuyển mô hình FOSTERNet sang chế độ huấn luyện.
             losses = 0.0
             correct, total = 0, 0
+            # Huấn luyện mô hình mới với dữ liệu từ tập huấn luyện (train_loader)
             for i, (_, inputs, targets) in enumerate(train_loader):
                 inputs, targets = inputs.to(
                     self._device, non_blocking=True
                 ), targets.to(self._device, non_blocking=True)
                 dark_logits = self._snet(inputs)["logits"]
                 with torch.no_grad():
-                    outputs = self._network(inputs)
+                    outputs = self._network(inputs) # Lấy dự đoán từ mô hình cũ (old model).
                     logits, old_logits, fe_logits = (
                         outputs["logits"],
                         outputs["old_logits"],
                         outputs["fe_logits"],
                     )
+                # Sử dụng BKD loss để truyền thông tin từ old model sang new model.
                 loss_dark = self.BKD(dark_logits, logits, self.args["T"])
                 loss = loss_dark
                 optimizer.zero_grad()
@@ -366,6 +372,7 @@ class FOSTER(BaseModel):
             logging.info(info)
         if len(self._multiple_gpus) > 1:
             self._snet = self._snet.module
+        # Weight Alignment (Tuỳ chọn)
         if self.is_student_wa:
             self._snet.weight_align(
                 self._known_classes,
@@ -376,6 +383,7 @@ class FOSTER(BaseModel):
             logging.info("do not weight align student!")
 
         self._snet.eval()
+        # Đánh giá trên Tập kiểm thử
         y_pred, y_true = [], []
         for _, (_, inputs, targets) in enumerate(test_loader):
             inputs = inputs.to(self._device, non_blocking=True)
@@ -402,7 +410,7 @@ class FOSTER(BaseModel):
             return self._memory_size // self._known_classes
 
     def samples_new_class(self, index):
-        if self.args["dataset"] == "cifar100":
+        if self.args["dataset"] == "etcdata":
             return 500
         else:
             return self.data_manager.getlen(index)

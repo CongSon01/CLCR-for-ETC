@@ -172,7 +172,8 @@ class CLCR(BaseLearner):
             )
             logging.info("per cls weights : {}".format(per_cls_weights))
             self.per_cls_weights = torch.FloatTensor(per_cls_weights).to(self._device)
-            self._feature_compression(train_loader, test_loader)
+            train_loader = self._flow_representation(train_loader)
+            self._CLCR_compression(train_loader, test_loader)
 
     def _init_train(self, train_loader, test_loader, optimizer, scheduler):
         prog_bar = tqdm(range(self.args["init_epochs"]))
@@ -215,6 +216,57 @@ class CLCR(BaseLearner):
                 )
             prog_bar.set_description(info)
             logging.info(info)
+
+    def _flow_representation(self, train_loader, test_loader, optimizer, scheduler):
+        prog_bar = tqdm(range(self.args["init_epochs"]))
+        for _, epoch in enumerate(prog_bar):
+            self._network.train()
+            losses = 0.0
+            correct, total = 0, 0
+            for i, (_, inputs, targets) in enumerate(train_loader):
+                inputs, targets = inputs.to(self._device), targets.to(self._device)
+                logits = self._network(inputs)["logits"]
+
+                loss_clf = F.cross_entropy(logits, targets)
+                loss_kd = _KD_loss(
+                    logits[:, : self._known_classes],
+                    self._old_network(inputs)["logits"],
+                    self.args["T"],
+                )
+
+                loss = loss_clf + loss_kd
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                losses += loss.item()
+
+                _, preds = torch.max(logits, dim=1)
+                correct += preds.eq(targets.expand_as(preds)).cpu().sum()
+                total += len(targets)
+
+            scheduler.step()
+            train_acc = np.around(tensor2numpy(correct) * 100 / total, decimals=2)
+            if epoch % 5 == 0:
+                test_acc = self._compute_accuracy(self._network, test_loader)
+                info = "Task {}, Epoch {}/{} => Loss {:.3f}, Train_accy {:.2f}, Test_accy {:.2f}".format(
+                    self._cur_task,
+                    epoch + 1,
+                    self.args["init_epochs"],
+                    losses / len(train_loader),
+                    train_acc,
+                    test_acc,
+                )
+            else:
+                info = "Task {}, Epoch {}/{} => Loss {:.3f}, Train_accy {:.2f}".format(
+                    self._cur_task,
+                    epoch + 1,
+                    self.args["init_epochs"],
+                    losses / len(train_loader),
+                    train_acc,
+                )
+            prog_bar.set_description(info)
+        logging.info(info)
 
     def _feature_boosting(self, train_loader, test_loader, optimizer, scheduler):
         prog_bar = tqdm(range(self.args["boosting_epochs"]))
@@ -291,7 +343,7 @@ class CLCR(BaseLearner):
             prog_bar.set_description(info)
             logging.info(info)
 
-    def _feature_compression(self, train_loader, test_loader):
+    def _CLCR_compression(self, train_loader, test_loader):
         self._snet = FOSTERNet(self.args["convnet_type"], False)
         self._snet.update_fc(self._total_classes)
         if len(self._multiple_gpus) > 1:
@@ -400,7 +452,7 @@ class CLCR(BaseLearner):
             return self._memory_size // self._known_classes
 
     def samples_new_class(self, index):
-        if self.args["dataset"] == "cifar100":
+        if self.args["dataset"] == "etcdata":
             return 500
         else:
             return self.data_manager.getlen(index)

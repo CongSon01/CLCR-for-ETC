@@ -4,7 +4,7 @@ import torch.utils.model_zoo as model_zoo
 
 """
 Credits to @hshustc
-Taken from https://github.com/hshustc/CVPR19_Incremental_Learning/tree/master/cifar100-class-incremental
+Taken from our etc data
 """
 
 
