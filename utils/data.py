@@ -31,7 +31,7 @@ class iData(object):
     class_order = None
 
 
-class ETCData(iData):
+class ETCDATA(iData):
     use_path = False
     train_trsf = [
         transforms.RandomCrop(32, padding=4),

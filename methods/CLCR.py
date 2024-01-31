@@ -83,7 +83,7 @@ class CLCR(BaseLearner):
         if len(self._multiple_gpus) > 1:
             self._network = nn.DataParallel(self._network, self._multiple_gpus)
         self._train(self.train_loader, self.test_loader)
-        self.build_rehearsal_memory(data_manager, self.samples_per_class)
+        self._flow_representation(data_manager, self.samples_per_class)
         if len(self._multiple_gpus) > 1:
             self._network = self._network.module
 
@@ -172,7 +172,6 @@ class CLCR(BaseLearner):
             )
             logging.info("per cls weights : {}".format(per_cls_weights))
             self.per_cls_weights = torch.FloatTensor(per_cls_weights).to(self._device)
-            train_loader = self._flow_representation(train_loader)
             self._CLCR_compression(train_loader, test_loader)
 
     def _init_train(self, train_loader, test_loader, optimizer, scheduler):

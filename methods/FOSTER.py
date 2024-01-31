@@ -35,6 +35,7 @@ class FOSTER(BaseModel):
         logging.info("Exemplar size: {}".format(self.exemplar_size))
 
     def incremental_train(self, data_manager):
+        # Chuẩn bị dữ liệu
         self.data_manager = data_manager
         self._cur_task += 1
         if self._cur_task > 1:
@@ -84,7 +85,10 @@ class FOSTER(BaseModel):
 
         if len(self._multiple_gpus) > 1:
             self._network = nn.DataParallel(self._network, self._multiple_gpus)
-        self._train(self.train_loader, self.test_loader)
+        # ========================
+        # traning
+        self._train(self.train_loader, self.test_loader)  
+        # Tạo lại các examplar
         self.build_rehearsal_memory(data_manager, self.samples_per_class)
         if len(self._multiple_gpus) > 1:
             self._network = self._network.module
@@ -99,6 +103,7 @@ class FOSTER(BaseModel):
         self._network.to(self._device)
         if hasattr(self._network, "module"):
             self._network_module_ptr = self._network.module
+        # Task 0 => Khởi tạo ...
         if self._cur_task == 0:
             optimizer = optim.SGD(
                 filter(lambda p: p.requires_grad, self._network.parameters()),
@@ -120,15 +125,17 @@ class FOSTER(BaseModel):
                     self._network = nn.DataParallel(self._network, self._multiple_gpus)
             else:
                 self._init_train(train_loader, test_loader, optimizer, scheduler)
+        # Khác task 0 => Cập nhật
         else:
-
+            # cls_num_list = n trong công thức 13
             cls_num_list = [self.samples_old_class] * self._known_classes + [
                 self.samples_new_class(i)
                 for i in range(self._known_classes, self._total_classes)
             ]
 
-            effective_num = 1.0 - np.power(self.beta1, cls_num_list)
-            per_cls_weights = (1.0 - self.beta1) / np.array(effective_num)
+            effective_num = 1.0 - np.power(self.beta1, cls_num_list) # E_n (CT 13)
+            per_cls_weights = (1.0 - self.beta1) / np.array(effective_num)   # Cong thuc 13
+            # CT 14
             per_cls_weights = (
                 per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
             )
@@ -153,7 +160,9 @@ class FOSTER(BaseModel):
                         ] = torch.tensor(0.0)
             elif self.oofc != "ft":
                 assert 0, "not implemented"
+            # Sau khi chuan bị hết các CT => Đi vào chi tiết
             self._feature_boosting(train_loader, test_loader, optimizer, scheduler)
+            # Tính hết được các chỉ Loss (LA, FE, KD)
             if self.is_teacher_wa:
                 self._network_module_ptr.weight_align(
                     self._known_classes,
@@ -162,18 +171,20 @@ class FOSTER(BaseModel):
                 )
             else:
                 logging.info("do not weight align teacher!")
-
+            # List các class đã biết
             cls_num_list = [self.samples_old_class] * self._known_classes + [
                 self.samples_new_class(i)
                 for i in range(self._known_classes, self._total_classes)
             ]
+            # Tính lại w (phục vụ cho CT 18)
             effective_num = 1.0 - np.power(self.beta2, cls_num_list)
-            per_cls_weights = (1.0 - self.beta2) / np.array(effective_num)
+            per_cls_weights = (1.0 - self.beta2) / np.array(effective_num) # CT 13
             per_cls_weights = (
                 per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
             )
             logging.info("per cls weights : {}".format(per_cls_weights))
             self.per_cls_weights = torch.FloatTensor(per_cls_weights).to(self._device)
+            # bắt đầu nén
             self._feature_compression(train_loader, test_loader)
 
     def _init_train(self, train_loader, test_loader, optimizer, scheduler):
@@ -237,8 +248,9 @@ class FOSTER(BaseModel):
                     outputs["fe_logits"],
                     outputs["old_logits"].detach(),
                 )
-                loss_clf = F.cross_entropy(logits / self.per_cls_weights, targets)
-                loss_fe = F.cross_entropy(fe_logits, targets)
+                loss_clf = F.cross_entropy(logits / self.per_cls_weights, targets) # CT 14
+                loss_fe = F.cross_entropy(fe_logits, targets)  #  CT 15
+                # Old loss * chi thức của những cái đã biết
                 loss_kd = self.lambda_okd * _KD_loss(
                     logits[:, : self._known_classes], old_logits, self.args["T"]
                 )
@@ -338,8 +350,8 @@ class FOSTER(BaseModel):
                         outputs["old_logits"],
                         outputs["fe_logits"],
                     )
-                # Sử dụng BKD loss để truyền thông tin từ old model sang new model.
-                loss_dark = self.BKD(dark_logits, logits, self.args["T"])
+                # dark_logits (F_t(s)); logits (f_t)
+                loss_dark = self.BKD(dark_logits, logits, self.args["T"])  # CT 18
                 loss = loss_dark
                 optimizer.zero_grad()
                 loss.backward()
@@ -416,6 +428,7 @@ class FOSTER(BaseModel):
             return self.data_manager.getlen(index)
 
     def BKD(self, pred, soft, T):
+        # pred: F_t(s); soft: F_t
         pred = torch.log_softmax(pred / T, dim=1)
         soft = torch.softmax(soft / T, dim=1)
         soft = soft * self.per_cls_weights
