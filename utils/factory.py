@@ -1,10 +1,10 @@
-from methods.CLCR import CLCR
-from methods.DER import DER
-from methods.FineTune import FineTune
-from methods.FOSTER import FOSTER
-from methods.iCaRL import iCaRL
-from methods.LwF import LwF
-from methods.Replay import Replay
+from methods.HybridCentric.CLCR import CLCR
+from methods.ModelCentric.DER import DER
+from methods.DataCentric.FineTune import FineTune
+from methods.ModelCentric.FOSTER import FOSTER
+from methods.AlgorithmCentric.iCaRL import iCaRL
+from methods.AlgorithmCentric.LwF import LwF
+from methods.DataCentric.Replay import Replay
 from methods.Scratch import Scratch
 
 def get_model(model_name, args):
